@@ -28,7 +28,6 @@ def get_named_model_params(module: torch.nn.Module):
     named_parameters = {n: p for n, p in module.named_parameters() if not n.endswith('gumble_arch_params')}
     return named_parameters
 
-
 class SuperNetwork(torch.nn.Module):
     def set_temperature(self, temp: Union[torch.Tensor, float]):
         if isinstance(temp, float):
@@ -56,7 +55,6 @@ class SuperNetwork(torch.nn.Module):
                 assert name not in genotype_dict
                 genotype_dict[name] = module.gumble_arch_params.data.cpu().numpy().tolist()
         return genotype_dict
-
 
 class MixedModule(torch.nn.Module):
     def __init__(self, ops: List[torch.nn.Module]):
@@ -120,6 +118,15 @@ class MixedModule(torch.nn.Module):
             best_sampled_alphas = torch.argmax(sampled_alphas, dim=0)
             return best_sampled_alphas.detach()
 
+class MixedSequential(torch.nn.Sequential):
+    def forward(self, input):
+        total_cost = 0
+        for module in self._modules.values():
+            input = module(input)
+            if isinstance(module, MixedModule):
+                input, cost = input
+                total_cost += cost
+        return input
 
 def gumbel_softmax_sample(logits, temperature, dim=None, std=1.0):
     y = logits + gumbel_dist.sample(logits.shape).to(device=logits.device, dtype=logits.dtype)
