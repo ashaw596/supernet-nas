@@ -1,0 +1,11 @@
+{
+    "configurations": [
+        {
+            "name": "Python custom launch",
+            "type": "python",
+            "cwd": "${workspaceFolder}",
+            "request": "launch",
+            "program": "${file}",
+        },
+    ]
+}
