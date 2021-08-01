@@ -25,6 +25,13 @@ class MyDenseLayer(tf.keras.layers.Layer):
 
 class TestMixedModuleTf(TestCase):
     def test_build(self):
+        # resolver = tf.distribute.cluster_resolver.TPUClusterResolver(tpu='')
+        # tf.config.experimental_connect_to_cluster(resolver)
+        # tf.tpu.experimental.initialize_tpu_system(resolver)
+        # strategy = tf.distribute.TPUStrategy(resolver)
+
+        strategy = tf.distribute.OneDeviceStrategy(device="/cpu:0")
+
         (x_train, y_train), (x_test, y_test) = keras.datasets.mnist.load_data()
         num_classes = 10
         input_shape = (28, 28, 1)
@@ -42,41 +49,41 @@ class TestMixedModuleTf(TestCase):
         # convert class vectors to binary class matrices
         y_train = keras.utils.to_categorical(y_train, num_classes)
         y_test = keras.utils.to_categorical(y_test, num_classes)
+        with strategy.scope():
+            model = keras.Sequential(
+                [
+                    keras.layers.InputLayer(input_shape=input_shape),
+                    layers.Conv2D(32, kernel_size=(3, 3), activation="relu"),
+                    MixedModuleTf([
+                        layers.Conv2D(32, kernel_size=(1, 1), activation="relu"),
+                        layers.Conv2D(32, kernel_size=(1, 1), activation="relu")
+                    ]),
+                    layers.MaxPooling2D(pool_size=(2, 2)),
+                    layers.Conv2D(64, kernel_size=(3, 3), activation="relu"),
+                    layers.MaxPooling2D(pool_size=(2, 2)),
+                    layers.Flatten(),
+                    layers.Dropout(0.5),
+                    # MyDenseLayer(num_classes)
+                    layers.Dense(num_classes, activation="softmax"),
+                ]
+            )
 
-        model = keras.Sequential(
-            [
-                keras.layers.InputLayer(input_shape=input_shape),
-                layers.Conv2D(32, kernel_size=(3, 3), activation="relu"),
-                MixedModuleTf([
-                    layers.Conv2D(32, kernel_size=(1, 1), activation="relu"),
-                    layers.Conv2D(32, kernel_size=(1, 1), activation="relu")
-                ]),
-                layers.MaxPooling2D(pool_size=(2, 2)),
-                layers.Conv2D(64, kernel_size=(3, 3), activation="relu"),
-                layers.MaxPooling2D(pool_size=(2, 2)),
-                layers.Flatten(),
-                layers.Dropout(0.5),
-                # MyDenseLayer(num_classes)
-                layers.Dense(num_classes, activation="softmax"),
+            arch_optim = tf.keras.optimizers.SGD(learning_rate=0.1, momentum=0)
+
+            model = NasModel(model)
+            model.build([None] + list(input_shape))
+
+            model.summary()
+            batch_size = 128
+
+            callbacks = [
+                SupernetTemperatureCallback(model, start_epoch=2, final_epoch=5, start_temp=5, end_temp=1)
             ]
-        )
 
-        arch_optim = tf.keras.optimizers.SGD(learning_rate=0.1, momentum=0)
-
-        model = NasModel(model)
-        model.build([None] + list(input_shape))
-
-        model.summary()
-        batch_size = 128
-
-        callbacks = [
-            SupernetTemperatureCallback(model, start_epoch=2, final_epoch=5, start_temp=5, end_temp=1)
-        ]
-
-        model.compile(loss="categorical_crossentropy",
-                      optimizer="adam",
-                      metrics=["accuracy"],
-                      arch_optimizer=arch_optim)
+            model.compile(loss="categorical_crossentropy",
+                          optimizer="adam",
+                          metrics=["accuracy"],
+                          arch_optimizer=arch_optim)
 
         model.fit(x_train, y_train,
                   steps_per_epoch=10,

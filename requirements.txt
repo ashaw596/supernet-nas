@@ -1,3 +1,6 @@
 rope==0.18.0
 autopep8==1.5.5
 thop
+torch
+tensorflow
+tensorflow_probability

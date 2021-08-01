@@ -10,7 +10,6 @@ class NasModel(keras.Model):
     def __init__(self, model):
         super().__init__()
         self.mod = model
-        # self.built = self.mod.built
 
     def compile(self, *inputs, arch_optimizer, **kwargs):
         self.arch_optimizer = arch_optimizer
@@ -35,7 +34,7 @@ class NasModel(keras.Model):
 
         super().compile(*inputs, **kwargs)
 
-    def train_step(self, data):
+    def train_step(self, data, slow_assert=False):
         # Unpack the data. Its structure depends on your model and
         # on what you pass to `fit()`.
         x, y = data
@@ -51,16 +50,17 @@ class NasModel(keras.Model):
         non_arch_gradients = gradients[0:len(self.non_arch_params)]
         arch_gradients = gradients[len(self.non_arch_params):]
 
-        # assert all(first is second for first, second in zip(self.non_arch_params, self.concat_params[0:len(self.non_arch_params)]))
-        # assert all(first is second for first, second in zip(self.arch_params, self.concat_params[len(self.non_arch_params):]))
+        if slow_assert:
+            assert all(first is second for first, second in zip(self.non_arch_params, self.concat_params[0:len(self.non_arch_params)]))
+            assert all(first is second for first, second in zip(self.arch_params, self.concat_params[len(self.non_arch_params):]))
 
         # Compute gradients
         non_arch_params = self.non_arch_params
-        # Update weights
+        # Update non arch weights
         self.optimizer.apply_gradients(zip(non_arch_gradients, non_arch_params))
 
         arch_params = self.arch_params
-        # Update weights
+        # Update arch weights
         self.arch_optimizer.apply_gradients(zip(arch_gradients, arch_params))
 
 
