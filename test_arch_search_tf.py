@@ -5,23 +5,8 @@ import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers
 
-from arch_search_tf import MixedModuleTf, SupernetTemperatureCallback, NasModel
+from arch_search_tf import MixedModuleTf, SupernetTemperatureCallback, NasModel, SupernetArchWatcherCallback
 
-
-class MyDenseLayer(tf.keras.layers.Layer):
-  def __init__(self, num_outputs):
-    super(MyDenseLayer, self).__init__()
-    self.num_outputs = num_outputs
-
-  def build(self, input_shape):
-    print("Build")
-    self.kernel = self.add_weight("kernel",
-                                  shape=[int(input_shape[-1]),
-                                         self.num_outputs])
-
-  def call(self, inputs):
-    print("Call")
-    return tf.matmul(inputs, self.kernel)
 
 class TestMixedModuleTf(TestCase):
     def test_build(self):
@@ -53,18 +38,24 @@ class TestMixedModuleTf(TestCase):
             model = keras.Sequential(
                 [
                     keras.layers.InputLayer(input_shape=input_shape),
-                    layers.Conv2D(32, kernel_size=(3, 3), activation="relu"),
-                    MixedModuleTf([
-                        layers.Conv2D(32, kernel_size=(1, 1), activation="relu"),
-                        layers.Conv2D(32, kernel_size=(1, 1), activation="relu")
-                    ]),
+                    # layers.Conv2D(32, kernel_size=(3, 3), activation="relu"),
+                    MixedModuleTf({
+                        '3x3': layers.Conv2D(32, kernel_size=(3, 3), activation="relu", padding="same"),
+                        '1x1': layers.Conv2D(32, kernel_size=(1, 1), activation="relu", padding="same")
+                    }, cost_loss_multiplier=1e-6),
                     layers.MaxPooling2D(pool_size=(2, 2)),
-                    layers.Conv2D(64, kernel_size=(3, 3), activation="relu"),
+                    MixedModuleTf([
+                        layers.Conv2D(64, kernel_size=(3, 3), activation="relu"),
+                        layers.Conv2D(64, kernel_size=(3, 3), activation="relu")
+                    ]),
                     layers.MaxPooling2D(pool_size=(2, 2)),
                     layers.Flatten(),
                     layers.Dropout(0.5),
                     # MyDenseLayer(num_classes)
-                    layers.Dense(num_classes, activation="softmax"),
+                    MixedModuleTf([
+                        layers.Dense(num_classes, activation="softmax"),
+                        layers.Dense(num_classes, activation="softmax"),
+                    ])
                 ]
             )
 
@@ -77,14 +68,14 @@ class TestMixedModuleTf(TestCase):
             batch_size = 128
 
             callbacks = [
-                SupernetTemperatureCallback(model, start_epoch=2, final_epoch=5, start_temp=5, end_temp=1)
+                SupernetTemperatureCallback(model, start_epoch=2, final_epoch=5, start_temp=5, end_temp=1),
+                SupernetArchWatcherCallback(model),
             ]
 
             model.compile(loss="categorical_crossentropy",
                           optimizer="adam",
                           metrics=["accuracy"],
                           arch_optimizer=arch_optim)
-
         model.fit(x_train, y_train,
                   steps_per_epoch=10,
                   batch_size=batch_size,
